@@ -69,28 +69,28 @@
 ### CON GET Request
 
 ```
-Bytes: __ __ __ __  __ __ __ __  __ ...
+Bytes: 42 01 57 56  a6 3b 60 57  66 ...
        [   Header   ] [  Token  ] [Options...]
 ```
 
 | Field | Bits/Bytes | Raw Value | Decoded Value |
 |-------|-----------|-----------|---------------|
-| Version (bits 7–6) | 2 bits | `__` | __ (always 1) |
-| Type (bits 5–4) | 2 bits | `__` | __ = CON |
-| TKL (bits 3–0) | 4 bits | `__` | Token length = __ |
-| Code (byte 1) | 8 bits | `__` | _.___ = GET |
-| Message ID (bytes 2–3) | 16 bits | `__ __` | ___ |
-| Token (bytes 4–TKL+3) | TKL bytes | `__ …` | 0x______ |
-| Option Delta | 4 bits | `__` | Delta = __, Option# = __ (___) |
-| Option Length | 4 bits | `__` | ___ |
-| Option Value | ___ bytes | `__ …` | "________" (Uri-Path) |
+| Version (bits 7–6) | 2 bits | `01` | 1 (always 1) |
+| Type (bits 5–4) | 2 bits | `00` | Type = CON(0) |
+| TKL (bits 3–0) | 4 bits | `0010` | Token length = 2 |
+| Code (byte 1) | 8 bits | `01` | Code: GET (1) |
+| Message ID (bytes 2–3) | 16 bits | `57 56` | 22358 |
+| Token (bytes 4–TKL+3) | TKL bytes | `a6 3b` | Token: a63b |
+| Option Delta | 4 bits | `0101` | Delta = 5, Option# = Type 11, Critical, Unsafe |
+| Option Length | 4 bits | `0111` | 7 |
+| Option Value | ___ bytes | `66 61 63 74 6f 72 79` | "factory" (Uri-Path) |
 
 **Byte 0 full expansion:**
 
 | Bit 7 | Bit 6 | Bit 5 | Bit 4 | Bit 3 | Bit 2 | Bit 1 | Bit 0 |
 |-------|-------|-------|-------|-------|-------|-------|-------|
 | Ver   | Ver   | T     | T     | TKL   | TKL   | TKL   | TKL   |
-| `_`   | `_`   | `_`   | `_`   | `_`   | `_`   | `_`   | `_`   |
+| `0`   | `1`   | `0`   | `0`   | `0`   | `0`   | `1`   | `0`   |
 
 ---
 
