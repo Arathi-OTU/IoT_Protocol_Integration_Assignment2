@@ -9,14 +9,20 @@ Run with:  python -m src.coap.server
 """
 
 import asyncio
+import sys
 import json
 import logging
 import random
 from datetime import datetime, timezone
+from tkinter import SEL
 
 import aiocoap
+from aiocoap.numbers import contentformat
 import aiocoap.resource as resource
 from aiocoap import Code, Message
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(levelname)-8s  %(message)s")
 log = logging.getLogger(__name__)
@@ -66,6 +72,8 @@ class SensorResource(resource.ObservableResource):
         self.sensor_type = sensor_type
         self._reading    = _sim(sensor_type)
         # TODO: start the background update loop
+        asyncio.ensure_future(self._update_loop())
+
         # Hint: asyncio.ensure_future(self._update_loop())
 
     async def _update_loop(self) -> None:
@@ -73,7 +81,11 @@ class SensorResource(resource.ObservableResource):
         TODO 2: Every 5 seconds, simulate a new reading and notify observers.
         """
         # TODO: implement this coroutine
-        pass
+        while True:
+            await asyncio.sleep(5)
+            self._reading = _sim(self.sensor_type)
+            self.updated_state()  # notify observers
+        
 
     async def render_get(self, request: Message) -> Message:
         """
@@ -82,7 +94,18 @@ class SensorResource(resource.ObservableResource):
               or pass content_format=50 to Message(...)
         """
         # TODO: implement this method
-        raise NotImplementedError
+        payload = {
+            "line": self.line,
+            "sensor": self.sensor_type,
+            "reading": self._reading,
+            }
+
+        return Message(
+            code= Code.CONTENT,
+            payload=_json(payload),
+            content_format = contentformat.ContentFormat.JSON,
+            )
+        
 
 
 # ── Actuator Resource ─────────────────────────────────────────────────────────
@@ -108,12 +131,32 @@ class ActuatorResource(resource.Resource):
     async def render_get(self, request: Message) -> Message:
         """TODO 5: Return current fan state as JSON."""
         # TODO: implement this method
-        raise NotImplementedError
+        payload = {"state": self._state}
+
+        return Message(
+            code = Code.CONTENT,
+            payload=_json(payload),
+            content_format = contentformat.ContentFormat.JSON,
+            )
+        
 
     async def render_put(self, request: Message) -> Message:
         """TODO 6: Accept ON/OFF command and update state."""
         # TODO: implement this method
-        raise NotImplementedError
+        try:
+            data = json.loads(request.payload.decode("utf-8"))
+            state = data.get("state", "").upper()
+
+            if state not in ["ON", "OFF"]:
+                return Message(code=Code.BAD_REQUEST, payload=b"Invalid state")
+
+            self._state = state
+            return Message(code=Code.CHANGED, payload=b"Changed")
+
+        except Exception:
+            return Message(code=Code.BAD_REQUEST, payload=b"Malformed JSON")
+
+        
 
 
 # ── Block-wise Manifest Resource ──────────────────────────────────────────────
@@ -137,7 +180,36 @@ class ManifestResource(resource.Resource):
         # TODO: implement this method
         # Hint: build a large dict with ~50 firmware entries, json.dumps it
         # Verify: len(payload) >= 3072
-        raise NotImplementedError
+        manifest = {
+            "factory": "smart-factory",
+            "version": "2.0",
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "firmware": []
+            }
+
+        # Create large dataset (>3KB)
+        for i in range(60):
+            manifest["firmware"].append({
+                "device": f"sensor-{i}",
+                "version": f"{1+ i//10}.{i%10}.0",
+                "checksum": f"sha256:{random.getrandbits(256):064x}",
+                "url": f"https://factory.local/firmware/sensor-{i}.bin",
+                "size_kb": random.randint(120,800)    
+                
+                })
+
+        payload = _json(manifest)
+
+        # Ensure > 3KB
+        assert len(payload) >= 3072, f"Manifest too small: {len(payload)} bytes"
+
+        return Message(
+            code=Code.CONTENT,
+            payload=payload,
+            content_format = contentformat.ContentFormat.JSON,
+        )
+
+
 
 
 # ── Resource Tree & Server Setup ──────────────────────────────────────────────
@@ -165,11 +237,32 @@ async def build_server() -> aiocoap.Context:
     #   root.add_resource(['factory', 'line1', 'temperature'],
     #                     SensorResource('line1', 'temperature'))
 
+    root.add_resource(['factory', 'line1', 'temperature'],
+                      SensorResource('line1', 'temperature'))
+
+    root.add_resource(['factory', 'line1', 'vibration'],
+                      SensorResource('line1', 'vibration'))
+
+    root.add_resource(['factory', 'line1', 'power'],
+                      SensorResource('line1', 'power'))
+
+    root.add_resource(['factory', 'line2', 'temperature'],
+                      SensorResource('line2', 'temperature'))
+
+    root.add_resource(['actuator', 'line1', 'fan'],
+                      ActuatorResource())
+
+    root.add_resource(['factory', 'manifest'],
+                      ManifestResource())
+
+    root.add_resource(['.well-known', 'core'],
+                      resource.WKCResource(root.get_resources_as_linkheader))
+
     # TODO: add /.well-known/core
     # root.add_resource(['.well-known', 'core'],
     #                   resource.WKCResource(root.get_resources_as_linkheader))
 
-    context = await aiocoap.Context.create_server_context(root)
+    context = await aiocoap.Context.create_server_context(root, bind=("127.0.0.1", 5683))
     return context
 
 
@@ -177,8 +270,8 @@ async def main() -> None:
     context = await build_server()
     log.info("CoAP server running on coap://localhost:5683")
     log.info("Resources: /factory/line{1,2}/{temperature,vibration,power}, /actuator/line1/fan, /factory/manifest")
-    await asyncio.get_event_loop().create_future()  # run forever
-
+    #await asyncio.get_event_loop().create_future()  # run forever
+    await asyncio.sleep(3600)
 
 if __name__ == "__main__":
     asyncio.run(main())
