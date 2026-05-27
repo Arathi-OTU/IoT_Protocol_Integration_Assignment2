@@ -1,7 +1,9 @@
 # Module 1 Assignment — Protocol Comparison Report
 
 **Student Name:**  **Arathi Arathi**
+
 **Student ID:**   **101057222**
+
 **Date:**        **28/06/2026**
 
 ---
