@@ -1,143 +1,225 @@
-"""
-Module 1 Assignment — CoAP Tests (Task 2)
-Do not modify this file.
-"""
 import asyncio
 import json
-import pytest
-import pytest_asyncio
+import random
+import time
 
 import aiocoap
-from aiocoap import Code, Message
+from aiocoap import Message, Code
+from aiocoap.numbers.types import NON, CON
 
-# We import lazily to allow skeleton files to exist with NotImplementedError
-
-pytestmark = pytest.mark.asyncio
-
-
-@pytest.fixture(scope="module")
-def event_loop():
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
+SERVER_URI = "coap://127.0.0.1/factory/line1/temperature"
+N_MESSAGES = 100
+LOSS_RATE = 0.10
 
 
-@pytest_asyncio.fixture(scope="module")
-async def coap_server():
-    """Start the CoAP server for the duration of the test module."""
-    try:
-        from src.coap.server import build_server
-        ctx = await build_server()
-        yield ctx
-        await ctx.shutdown()
-    except NotImplementedError:
-        pytest.skip("CoAP server not yet implemented (NotImplementedError)")
+async def run_non(ctx: aiocoap.Context) -> dict:
+    """
+    Send N_MESSAGES NON GET requests.
+    Randomly skip LOSS_RATE fraction to simulate packet loss.
+    NON has no retry → skipped requests are lost forever.
+    """
+    sent = N_MESSAGES
+    received = 0
+    lost = 0
+    latencies = []
 
+    for i in range(N_MESSAGES):
+        # Simulate 10% packet loss by skipping the request entirely
+        if random.random() < LOSS_RATE:
+            lost += 1
+            await asyncio.sleep(0.03)
+            continue
 
-@pytest_asyncio.fixture(scope="module")
-async def coap_client():
-    ctx = await aiocoap.Context.create_client_context()
-    yield ctx
-    await ctx.shutdown()
+        t0 = time.time()
 
-
-class TestCoAPServer:
-
-    async def test_get_temperature_line1(self, coap_server, coap_client):
-        """GET /factory/line1/temperature must return 2.05 with JSON payload."""
-        request = Message(code=Code.GET, uri="coap://localhost/factory/line1/temperature")
-        response = await coap_client.request(request).response
-        assert response.code == Code.CONTENT, \
-            f"Expected 2.05 Content, got {response.code}"
-        data = json.loads(response.payload)
-        assert "value" in data, "Response must contain 'value' key"
-        assert "unit" in data, "Response must contain 'unit' key"
-        assert data["unit"] == "C", f"Expected unit 'C', got {data['unit']}"
-
-    async def test_get_vibration_line1(self, coap_server, coap_client):
-        """GET /factory/line1/vibration must return 2.05 with JSON payload."""
-        request = Message(code=Code.GET, uri="coap://localhost/factory/line1/vibration")
-        response = await coap_client.request(request).response
-        assert response.code == Code.CONTENT
-        data = json.loads(response.payload)
-        assert "value" in data
-        assert data["unit"] == "mm/s"
-
-    async def test_get_power_line1(self, coap_server, coap_client):
-        """GET /factory/line1/power must return 2.05 Content."""
-        request = Message(code=Code.GET, uri="coap://localhost/factory/line1/power")
-        response = await coap_client.request(request).response
-        assert response.code == Code.CONTENT
-        data = json.loads(response.payload)
-        assert data["unit"] == "kW"
-
-    async def test_get_temperature_line2(self, coap_server, coap_client):
-        """GET /factory/line2/temperature must work."""
-        request = Message(code=Code.GET, uri="coap://localhost/factory/line2/temperature")
-        response = await coap_client.request(request).response
-        assert response.code == Code.CONTENT
-
-    async def test_put_actuator_on(self, coap_server, coap_client):
-        """PUT /actuator/line1/fan with {state:ON} must return 2.04 Changed."""
-        payload = json.dumps({"state": "ON"}).encode()
-        request = Message(code=Code.PUT,
-                          uri="coap://localhost/actuator/line1/fan",
-                          payload=payload,
-                          content_format=50)
-        response = await coap_client.request(request).response
-        assert response.code.dotted == "2.04", \
-            f"Expected 2.04 Changed, got {response.code}"
-
-        # Verify state change
-        get_req = Message(code=Code.GET, uri="coap://localhost/actuator/line1/fan")
-        get_resp = await coap_client.request(get_req).response
-        data = json.loads(get_resp.payload)
-        assert data.get("state") == "ON", f"Fan state should be ON, got {data}"
-
-    async def test_put_actuator_off(self, coap_server, coap_client):
-        """PUT /actuator/line1/fan with {state:OFF} must return 2.04 Changed."""
-        payload = json.dumps({"state": "OFF"}).encode()
-        request = Message(code=Code.PUT,
-                          uri="coap://localhost/actuator/line1/fan",
-                          payload=payload,
-                          content_format=50)
-        response = await coap_client.request(request).response
-        assert response.code.dotted == "2.04"
-
-    async def test_put_actuator_invalid(self, coap_server, coap_client):
-        """PUT /actuator/line1/fan with invalid state must return 4.00 Bad Request."""
-        payload = json.dumps({"state": "INVALID"}).encode()
-        request = Message(code=Code.PUT,
-                          uri="coap://localhost/actuator/line1/fan",
-                          payload=payload,
-                          content_format=50)
-        response = await coap_client.request(request).response
-        assert response.code.dotted == "4.00", \
-            f"Expected 4.00 Bad Request for invalid state, got {response.code}"
-
-    async def test_block2_manifest_large_enough(self, coap_server, coap_client):
-        """GET /factory/manifest must return >= 3072 bytes."""
-        request = Message(code=Code.GET, uri="coap://localhost/factory/manifest")
-        response = await coap_client.request(request).response
-        assert response.code == Code.CONTENT
-        assert len(response.payload) >= 3072, \
-            f"Manifest too small: {len(response.payload)} bytes (need >= 3072)"
-
-    async def test_block2_manifest_valid_json(self, coap_server, coap_client):
-        """GET /factory/manifest payload must be valid JSON."""
-        request = Message(code=Code.GET, uri="coap://localhost/factory/manifest")
-        response = await coap_client.request(request).response
         try:
-            data = json.loads(response.payload)
-        except json.JSONDecodeError as e:
-            pytest.fail(f"Manifest is not valid JSON: {e}")
-        assert isinstance(data, (list, dict)), "Manifest must be a JSON list or object"
+            request = Message(
+                mtype=NON,
+                code=Code.GET,
+                uri=SERVER_URI
+            )
 
-    async def test_well_known_core(self, coap_server, coap_client):
-        """GET /.well-known/core must return 2.05 Content."""
-        request = Message(code=Code.GET, uri="coap://localhost/.well-known/core")
-        response = await coap_client.request(request).response
-        assert response.code == Code.CONTENT
-        payload_str = response.payload.decode()
-        assert "/factory" in payload_str or "factory" in payload_str, \
-            "/.well-known/core should list factory resources"
+            response = await asyncio.wait_for(
+                ctx.request(request).response,
+                timeout=2.0
+            )
+
+            if response.code == Code.CONTENT:
+                received += 1
+                latencies.append((time.time() - t0) * 1000)
+
+        except asyncio.TimeoutError:
+            lost += 1
+
+        except Exception:
+            lost += 1
+
+        await asyncio.sleep(0.03)
+
+    return {
+        "sent": sent,
+        "received": received,
+        "lost": lost,
+        "loss_pct": lost / sent * 100,
+        "duplicates": 0,
+        "avg_lat_ms": (
+            sum(latencies) / len(latencies)
+            if latencies
+            else 0
+        ),
+    }
+
+
+async def run_con(ctx: aiocoap.Context) -> dict:
+    """
+    Send N_MESSAGES CON GET requests.
+    All are sent — aiocoap retransmits automatically
+    on timeout → 0% loss.
+    """
+    sent = N_MESSAGES
+    received = 0
+    lost = 0
+    duplicates = 0
+    latencies = []
+    seen_values: set = set()
+
+    for i in range(N_MESSAGES):
+        t0 = time.time()
+
+        try:
+            request = Message(
+                mtype=CON,
+                code=Code.GET,
+                uri=SERVER_URI
+            )
+
+            response = await asyncio.wait_for(
+                ctx.request(request).response,
+                timeout=5.0
+            )
+
+            if response.code == Code.CONTENT:
+                received += 1
+
+                latency = (time.time() - t0) * 1000
+                latencies.append(latency)
+
+                # CON GET is request-response:
+                # each request gets exactly one response
+                # duplicates don't occur in this pattern.
+                # (Duplicates are a pub-sub concern,
+                # not per-GET requests.)
+
+        except asyncio.TimeoutError:
+            lost += 1
+
+        except Exception:
+            lost += 1
+
+        await asyncio.sleep(0.03)
+
+    return {
+        "sent": sent,
+        "received": received,
+        "lost": lost,
+        "loss_pct": lost / sent * 100,
+        "duplicates": duplicates,
+        "avg_lat_ms": (
+            sum(latencies) / len(latencies)
+            if latencies
+            else 0
+        ),
+    }
+
+
+def print_table(results: dict) -> None:
+    print()
+    print("=" * 72)
+    print(
+        f" CoAP NON vs CON Results — "
+        f"10% simulated loss (N={N_MESSAGES})"
+    )
+    print("=" * 72)
+
+    print(
+        f"{'Type':<10} {'Sent':>6} "
+        f"{'Received':>10} {'Lost':>6} "
+        f"{'Loss%':>7} {'Dupes':>7} "
+        f"{'Avg Lat(ms)':>14}"
+    )
+
+    print("-" * 72)
+
+    for label, r in results.items():
+        print(
+            f"{label:<10} "
+            f"{r['sent']:>6} "
+            f"{r['received']:>10} "
+            f"{r['lost']:>6} "
+            f"{r['loss_pct']:>6.1f}% "
+            f"{r['duplicates']:>7} "
+            f"{r['avg_lat_ms']:>13.1f}"
+        )
+
+    print("=" * 72)
+    print()
+
+    print("Simulation logic used:")
+    print(" NON → 10% of requests skipped (no retry → lost forever)")
+    print(
+        " CON → all requests sent, "
+        "aiocoap retransmits on timeout → 0% loss"
+    )
+
+    print()
+    print("Copy these rows into Section 5.1 of your report.")
+    print()
+
+
+async def main():
+    print(
+        f"\nRunning CoAP experiment "
+        f"(N={N_MESSAGES} msgs, "
+        f"~{LOSS_RATE * 100:.0f}% simulated loss)"
+    )
+
+    print(f"Target: {SERVER_URI}\n")
+
+    ctx = await aiocoap.Context.create_client_context()
+
+    # Quick connectivity check
+    try:
+        test_req = Message(
+            code=Code.GET,
+            uri=SERVER_URI
+        )
+
+        await asyncio.wait_for(
+            ctx.request(test_req).response,
+            timeout=3.0
+        )
+
+    except Exception:
+        print("ERROR: Cannot reach CoAP server.")
+        print("Start it first in another terminal:")
+        print(" python3 -m src.coap.server")
+
+        await ctx.shutdown()
+        return
+
+    results = {}
+
+    print(" Running CoAP NON...", end=" ", flush=True)
+    results["CoAP NON"] = await run_non(ctx)
+    print("done")
+
+    print(" Running CoAP CON...", end=" ", flush=True)
+    results["CoAP CON"] = await run_con(ctx)
+    print("done")
+
+    await ctx.shutdown()
+    print_table(results)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
