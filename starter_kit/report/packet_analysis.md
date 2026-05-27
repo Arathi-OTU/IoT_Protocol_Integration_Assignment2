@@ -9,26 +9,26 @@
 
 | Field | Offset (bytes) | Raw Hex | Decoded Value |
 |-------|---------------|---------|---------------|
-| Frame type + flags (byte 1) | 0 | `__` | Type=CONNECT (____), flags=____ |
-| Remaining length (byte 2) | 1 | `__` | ___ bytes |
-| Protocol name length | 2–3 | `__ __` | 4 |
+| Frame type + flags (byte 1) | 0 | `10` | Type=CONNECT (Command), flags=0001 |
+| Remaining length (byte 2) | 1 | `45` | 69 bytes |
+| Protocol name length | 2–3 | `00 04` | 4 |
 | Protocol name | 4–7 | `4D 51 54 54` | "MQTT" |
-| Protocol version | 8 | `__` | __ (MQTT ___) |
-| Connect flags | 9 | `__` | See breakdown below |
-| Keep-alive | 10–11 | `__ __` | ___ seconds |
-| Client ID length | 12–13 | `__ __` | ___ |
-| Client ID | 14–… | `__ …` | "_______" |
+| Protocol version | 8 | `04` | MQTT v3.1.1 (4) |
+| Connect flags | 9 | `2c` | 0x2c, Will retain, QoS Level : At least once delivery (Acknowledge deliver), Will Flag  |
+| Keep-alive | 10–11 | `00 3c` | 60 seconds |
+| Client ID length | 12–13 | `00 1a` | 26 |
+| Client ID | 14–… | `73 6d 61 72 74 66 61 63 74 6f 72 79 2d 70 75 62 6c 69 73 68 65 72 2d 30 30 31` | "smartfactory-publisher-001" |
 
 **Connect Flags byte breakdown:**
 
 | Bit | Name | Value | Meaning |
 |-----|------|-------|---------|
-| 7 | Username flag | __ | ________ |
-| 6 | Password flag | __ | ________ |
-| 5 | Will retain | __ | ________ |
-| 4–3 | Will QoS | __ | ________ |
-| 2 | Will flag | __ | ________ |
-| 1 | Clean session | __ | ________ |
+| 7 | Username flag | 0 | Not set |
+| 6 | Password flag | 0 | Not set |
+| 5 | Will retain | 1 | Set |
+| 4–3 | Will QoS | 01 | At least once delivery (Acknowledged deliver) (1) |
+| 2 | Will flag | 1 | Set |
+| 1 | Clean session | 0 | Not set |
 | 0 | Reserved | 0 | — |
 
 ---
@@ -37,18 +37,18 @@
 
 | Field | Offset (bytes) | Raw Hex | Decoded Value |
 |-------|---------------|---------|---------------|
-| Fixed header byte 1 | 0 | `__` | Type=PUBLISH(____), DUP=_, QoS=__, RETAIN=_ |
-| Remaining length | 1 | `__` | ___ bytes |
-| Topic length | 2–3 | `__ __` | ___ |
-| Topic string | 4–… | `__ …` | "_______" |
-| Packet Identifier | … | `__ __` | ___ |
-| Payload | … | `__ …` | "_______" |
+| Fixed header byte 1 | 0 | `33` | Message Type: Publish Message, QoS Level : At least once delivery (Acknowledged deliver), Retain |
+| Remaining length | 1 | `1e` | 30 bytes |
+| Topic length | 2–3 | `00 14` | 20 |
+| Topic string | 4–… | `66 61 63 74 6f 72 79 2f 6c 69 6e 65 31 2f 73 74 61 74 75 73` | "factory/line1/status" |
+| Packet Identifier | … | `00 01` | 1 |
+| Payload | … | `6f 6e 6c 69 6e 65` | "6f6e6c696e65" |
 
 **Fixed header byte 1 bit expansion:**
 
 | Bits 7–4 (packet type) | Bit 3 (DUP) | Bits 2–1 (QoS) | Bit 0 (RETAIN) |
 |------------------------|-------------|----------------|----------------|
-| `____` = PUBLISH (3)  | `_` = ___   | `__` = QoS _   | `_` = ___      |
+| `0011` = PUBLISH (3)  | `0` = No   | `01` = QoS 01   | `1` = Yes      |
 
 ---
 
@@ -56,11 +56,11 @@
 
 | Field | Offset | Raw Hex | Decoded Value |
 |-------|--------|---------|---------------|
-| Fixed header | 0 | `__` | Type=PUBACK (0100) |
+| Fixed header | 0 | `40` | Message Type: Publish Ack |
 | Remaining length | 1 | `02` | 2 bytes |
-| Packet Identifier | 2–3 | `__ __` | ___ |
+| Packet Identifier | 2–3 | `00 01` | 1 |
 
-**Packet Identifier match:** PUBLISH PKT ID = ___ ; PUBACK PKT ID = ___ ; **Match? ___**
+**Packet Identifier match:** PUBLISH PKT ID = 96 ; PUBACK PKT ID = 96 ; **Match? Yes**
 
 ---
 
