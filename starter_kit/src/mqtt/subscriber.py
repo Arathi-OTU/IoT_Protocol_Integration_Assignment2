@@ -58,6 +58,18 @@ class SmartFactorySubscriber:
           Log any connection failure at ERROR level.
         """
         # TODO: implement this callback
+
+        if rc == 0:
+            log.info("Connected to broker")
+
+            # QoS 1 for all messages
+            client.subscribe(TOPIC_ALL, qos=1)
+
+            # QoS for temperature messages
+            client.subscribe(TOPIC_TEMP, qos=2)
+        else:
+            log.error(f"Connection failed with code {rc}")
+
         pass
 
     # ── Message Handling ───────────────────────────────────────────────────────
@@ -72,6 +84,31 @@ class SmartFactorySubscriber:
           - Every SUMMARY_INTERVAL seconds, call _print_summary
         """
         # TODO: implement this callback
+        self._msg_counts[msg.topic] += 1
+
+        # Parse payload
+        payload_raw = msg.payload.decode("utf-8")
+
+        try:
+            payload = json.loads(payload_raw)
+        except json.JSONDecodeError:
+            payload = payload_raw
+
+
+        # Print message
+        self._print_message(msg, payload)
+
+        # Temperature alert check
+        if msg.topic.endswith("/temperature"):
+            self._check_temperature_alert(msg.topic, payload)
+
+
+        # Summary every 30 seconds
+        if time.time() - self._last_summary >= SUMMARY_INTERVAL:
+            self._print_summary()
+            self._last_summary = time.time()
+
+
         pass
 
     def _print_message(self, msg: mqtt.MQTTMessage, payload: Any) -> None:
@@ -82,6 +119,16 @@ class SmartFactorySubscriber:
           - Otherwise show the raw payload
         """
         # TODO: implement this method
+        timestamp = datetime.now().strftime("%H:%M:%S")
+
+        if isinstance(payload, dict):
+            value = payload.get("value", payload)
+        else:
+            value = payload
+
+
+        print(f"[{timestamp}] {msg.topic} val={value} Qos={msg.qos} retain{msg.retain}")
+
         pass
 
     def _check_temperature_alert(self, topic: str, payload: Any) -> None:
@@ -97,6 +144,19 @@ class SmartFactorySubscriber:
                   ╚══════════════════════════════════════╝
         """
         # TODO: implement this method
+        if isinstance(payload, dict) and "value" in payload:
+            value = payload["value"]
+            timestamp = payload.get("timestamp", datetime.now().isoformat())
+
+            if value > CRITICAL_TEMP:
+                self._alerts_fired += 1
+
+                print("\n╔══════════════════════════════════════╗")
+                print(f"║  ⚠ CRITICAL ALERT —{topic}")
+                print(f"║  Temperature: {value}°C  (threshold: {CRITICAL_TEMP}°C)")
+                print(f"║  Time: {timestamp}")
+                print("╚══════════════════════════════════════╝\n")
+
         pass
 
     def _print_summary(self) -> None:
@@ -110,6 +170,16 @@ class SmartFactorySubscriber:
             ─────────────────────────────────────────
         """
         # TODO: implement this method
+        print("\n── Message Summary ──────────────────────")
+
+        total =0
+        for topic, count in self._msg_counts.items():
+            print(f"{topic:<50}  {count:>6} msgs")
+            total += count
+
+        print(f"\n Total: {total} messages  |  Alerts fired: {self._alerts_fired}")
+        print("─────────────────────────────────────────\n")
+
         pass
 
     # ── Run ────────────────────────────────────────────────────────────────────
