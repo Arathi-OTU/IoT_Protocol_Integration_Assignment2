@@ -98,13 +98,13 @@ Bytes: 42 01 57 56  a6 3b 60 57  66 ...
 
 | Field | Bytes | Raw Hex | Decoded Value |
 |-------|-------|---------|---------------|
-| Fixed header byte 0 | 0 | `__` | Ver=01, T=10 (ACK), TKL=__ |
-| Code byte 1 | 1 | `__` | 2.05 = Content |
-| Message ID | 2–3 | `__ __` | ___ (matches request? ___) |
-| Token | 4–… | `__ …` | 0x______ (matches request? ___) |
-| Option: Content-Format | … | `__ __` | Option# = 12, Value = __ (___) |
+| Fixed header byte 0 | 0 | `__` | Ver=01, T=10 (ACK), TKL=2 |
+| Code byte 1 | 1 | `45` | 2.05 = Content |
+| Message ID | 2–3 | `57 56` | 22358 (matches request? Yes) |
+| Token | 4–… | `a6 3b` | a63b (matches request? Yes) |
+| Option: Content-Format | … | `61 32` | Option# = 12, Elective, Safe |
 | Payload Marker | … | `FF` | 0xFF |
-| Payload | … | `__ …` | "_______" |
+| Payload | … | `7b 22 6c 69 6e 65 22 3a 20 ...` | "[Uri-Path:/ factory/line1/temperature]" |
 
 ---
 
@@ -112,10 +112,10 @@ Bytes: 42 01 57 56  a6 3b 60 57  66 ...
 
 | Field | Value |
 |-------|-------|
-| Observe option number | ___ |
-| Observe sequence value | ___ |
-| Message type | ___ (CON / NON) |
-| Response code | ___ |
+| Observe option number | 4 |
+| Observe sequence value | Uri-Path: temperature|
+| Message type | Critical, Unsafe (CON) |
+| Response code | 0b 74 65 6d 70 65 72 61 74 75 72 65 |
 
 ---
 
