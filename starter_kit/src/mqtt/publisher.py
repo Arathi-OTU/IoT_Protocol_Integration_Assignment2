@@ -9,6 +9,7 @@ or the SensorReading dataclass — the tests depend on them.
 import json
 import logging
 import random
+from socket import timeout
 import time
 from dataclasses import dataclass, asdict
 from datetime import datetime, timezone
@@ -75,7 +76,28 @@ class SmartFactoryPublisher:
              the tests only verify line1 LWT)
         """
         # TODO: implement this method
-        raise NotImplementedError
+
+        client = mqtt.Client(
+            client_id= CLIENT_ID,
+            clean_session=False
+            )
+        
+        client.on_connect = self.on_connect
+        client.on_publish = self.on_publish
+
+        # LWT only for line1 
+        client.will_set(
+            topic ="factory/line1/status",
+            payload="offline",
+            qos=1,
+            retain=True
+            )
+
+        self._client = client
+
+        return client
+
+        
 
     def connect(self) -> None:
         """
@@ -86,7 +108,29 @@ class SmartFactoryPublisher:
           - For each line, publish retained 'online' to factory/{line}/status (QoS 1)
         """
         # TODO: implement this method
-        raise NotImplementedError
+        self._build_client()
+
+        assert self._client is not None
+
+        self._client.connect(self.broker_host, self.broker_port, keepalive=60)
+        self._client.loop_start()
+
+        # Wait for connection (5 seconds)
+        timeout = time.time() + 5
+        while not hasattr(self, "_connected") and time.time() < timeout:
+            time.sleep(0.1)
+
+        if not getattr(self, "_connected", False):
+            raise TimeoutError("MQTT connection failed or time out")
+
+        # Publish online retained for each line
+
+        for line in LINES:
+            topic =f"factory/{line}/status"
+            self._client.publish(topic, "online", qos=1, retain=True)
+            log.info(f"[STATUS] {topic} = online (retained)")
+
+        
 
     def disconnect(self) -> None:
         """Cleanly disconnect: publish 'offline' retained for each line, then stop."""
@@ -107,6 +151,13 @@ class SmartFactoryPublisher:
           - Log "Connection refused: <rc>" at ERROR level on failure
         """
         # TODO: implement this callback
+
+        if rc == 0:
+            self._connected = True
+            log.info(f"Connected (rc ={rc})")
+        else:
+            log.error(f"Connected refused: {rc}")
+            self._connected = False
         pass
 
     def on_publish(self, client, userdata, mid: int) -> None:
@@ -115,6 +166,8 @@ class SmartFactoryPublisher:
           - Log "PUBACK received for mid=<mid>" at DEBUG level
         """
         # TODO: implement this callback
+        log.debug(f"PUBACK received for mid ={mid}")
+
         pass
 
     # ── Sensor Simulation ──────────────────────────────────────────────────────
@@ -141,7 +194,10 @@ class SmartFactoryPublisher:
           Example: factory/line1/temperature
         """
         # TODO: implement this method
-        raise NotImplementedError
+
+        return f"factory/{line}/{sensor}"
+
+        
 
     # ── Publishing ─────────────────────────────────────────────────────────────
 
@@ -155,7 +211,25 @@ class SmartFactoryPublisher:
           - Return the SensorReading for testing purposes
         """
         # TODO: implement this method
-        raise NotImplementedError
+
+        reading = self._simulate_reading(line, sensor)
+
+        payload = json.dumps(asdict(reading))
+
+        topic = self._topic(line, sensor)
+
+        qos = SENSORS[sensor]["qos"]
+
+        result = self._client.publish(topic, payload, qos=qos)
+
+        log.info(
+            f"[{line}/{sensor}] value = {reading.value} {reading.unit} "
+            f"QoS={qos} seq ={reading.seq}"
+            )
+
+        return reading
+
+        
 
     # ── Main Loop ──────────────────────────────────────────────────────────────
 
