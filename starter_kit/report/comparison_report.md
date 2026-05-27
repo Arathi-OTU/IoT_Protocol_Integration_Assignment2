@@ -71,19 +71,22 @@
 
 ## 5.4 Reflection
 
-*(300–400 words addressing all three prompts below.)*
-
 ### Technical Challenge
 
-> *Describe one technical challenge you encountered in the implementation and how you resolved it.*
+> One technical challenge was handling message matching and acknowledgments correctly in CoAP (especially CON requests and responses).
+> At first, responses were occasionally being ignored or mismatched because the implementation wasn’t consistently using both the Message ID and Token together. This caused issues where an ACK or response could not be correctly linked back to the original request, especially under simulated loss or delay.
+> It was resolved by strictly following CoAP’s design rules: using the Message ID only for transport-level reliability (ACK/timeout handling) and the Token for application-level request/response matching. Once the code was updated to separate these concerns properly and store pending requests in a lookup table keyed by Token + Message ID, the reliability and correctness issues were eliminated.
 
 ### Most Surprising Protocol Difference
 
-> *Describe the most surprising difference you observed between the protocols during the packet capture task.*
+> The most surprising difference is how stateful MQTT appears compared to CoAP in packet captures, even though both are used for lightweight IoT communication. MQTT runs over a persistent TCP connection, so in the capture you mostly see continuous stream behavior plus explicit control packets like PUBLISH and PUBACK tied to QoS, while CoAP over UDP shows discrete, self-contained messages (CON/NON with ACKs) that are easier to spot individually.
+> What stood out most is that MQTT hides much of the “message structure” inside TCP, making application events less visually obvious in Wireshark/tshark, whereas CoAP packets look more transparent and directly traceable end-to-end.
 
 ### Most Complex Protocol to Implement
 
-> *Which protocol was the most complex to implement correctly, and what specifically made it harder?*
+> CoAP was generally the more complex protocol to implement correctly.
+> The main difficulty comes from its reliability model over UDP, which is not built in like TCP. You have to manually handle message types like CON, NON, ACK, and RST, along with retransmissions, timeouts, and duplicate detection. Getting the matching of Message IDs and tokens right (especially for request/response pairing and observing resources) adds extra state management that is easy to get wrong.
+> In contrast, MQTT is simpler to implement because TCP already handles ordering and reliability, and the MQTT client library typically abstracts most of the protocol details like QoS flow, acknowledgments, and reconnections.
 
 ---
 
